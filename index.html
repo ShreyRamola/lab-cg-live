@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Projection Visualizer (Web Version)</title>
+    <style>
+        body {
+            background: #111;
+            color: white;
+            font-family: Arial;
+            text-align: center;
+        }
+        canvas {
+            background: #222;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>3D Projection Visualizer</h2>
+<p>
+    1–4 = Shapes | Arrow keys = Rotate X/Y | A/D = Rotate Z | +/- = Zoom <br>
+    O = Ortho | P = Perspective | I = Isometric | M = Multi-Mode
+</p>
+
+<canvas id="screen" width="640" height="480"></canvas>
+
+<script>
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+
+let angleX = 0, angleY = 0, angleZ = 0;
+let zoom = 1;
+let choice = 1;
+let multi = false;
+
+function rotate(p) {
+    let { x, y, z } = p;
+
+    let radX = angleX * Math.PI / 180;
+    let radY = angleY * Math.PI / 180;
+    let radZ = angleZ * Math.PI / 180;
+
+    // Z rotation
+    let x1 = x * Math.cos(radZ) - y * Math.sin(radZ);
+    let y1 = x * Math.sin(radZ) + y * Math.cos(radZ);
+    x = x1; y = y1;
+
+    // Y rotation
+    x1 = x * Math.cos(radY) + z * Math.sin(radY);
+    let z1 = -x * Math.sin(radY) + z * Math.cos(radY);
+    x = x1; z = z1;
+
+    // X rotation
+    y1 = y * Math.cos(radX) - z * Math.sin(radX);
+    z1 = y * Math.sin(radX) + z * Math.cos(radX);
+    y = y1; z = z1;
+
+    return { x, y, z };
+}
+
+// Projections
+function ortho(p) {
+    return { 
+        x: 320 + p.x * zoom,
+        y: 240 - p.y * zoom
+    };
+}
+
+function perspective(p) {
+    let d = 200;
+    return {
+        x: 320 + (p.x * d * zoom) / (p.z + d),
+        y: 240 - (p.y * d * zoom) / (p.z + d)
+    };
+}
+
+function iso(p) {
+    let cos30 = 0.866, sin30 = 0.5;
+    return {
+        x: 320 + (p.x - p.y) * cos30 * zoom,
+        y: 240 - ((p.x + p.y) * sin30 * zoom + p.z * zoom)
+    };
+}
+
+let projection = perspective;
+
+// Draw Line
+function line(p1, p2) {
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.strokeStyle = "white";
+    ctx.stroke();
+}
+
+// Shapes
+const cube = [
+    {x:-50,y:-50,z:-50},{x:50,y:-50,z:-50},{x:50,y:50,z:-50},{x:-50,y:50,z:-50},
+    {x:-50,y:-50,z:50},{x:50,y:-50,z:50},{x:50,y:50,z:50},{x:-50,y:50,z:50}
+];
+
+const cuboid = [
+    {x:-70,y:-40,z:-30},{x:70,y:-40,z:-30},{x:70,y:40,z:-30},{x:-70,y:40,z:-30},
+    {x:-70,y:-40,z:30},{x:70,y:-40,z:30},{x:70,y:40,z:30},{x:-70,y:40,z:30}
+];
+
+const pyramid = [
+    {x:-50,y:-50,z:50},{x:50,y:-50,z:50},{x:50,y:-50,z:-50},{x:-50,y:-50,z:-50},{x:0,y:50,z:0}
+];
+
+function drawBox(shape) {
+    let p = shape.map(v => projection(rotate(v)));
+
+    let edges = [
+        [0,1],[1,2],[2,3],[3,0],
+        [4,5],[5,6],[6,7],[7,4],
+        [0,4],[1,5],[2,6],[3,7]
+    ];
+
+    edges.forEach(e => line(p[e[0]], p[e[1]]));
+}
+
+function drawPyramid() {
+    let p = pyramid.map(v => projection(rotate(v)));
+
+    line(p[0], p[1]);
+    line(p[1], p[2]);
+    line(p[2], p[3]);
+    line(p[3], p[0]);
+
+    for (let i = 0; i < 4; i++)
+        line(p[i], p[4]);
+}
+
+function drawSphere() {
+    let r = 60;
+
+    for (let phi = -90; phi <= 90; phi += 30) {
+        let prev = null;
+        for (let theta = 0; theta <= 360; theta += 10) {
+            let p = {
+                x: r * Math.cos(phi * Math.PI/180) * Math.cos(theta * Math.PI/180),
+                y: r * Math.sin(phi * Math.PI/180),
+                z: r * Math.cos(phi * Math.PI/180) * Math.sin(theta * Math.PI/180)
+            };
+
+            p = projection(rotate(p));
+
+            if (prev) line(prev, p);
+            prev = p;
+        }
+    }
+}
+
+function draw() {
+    ctx.clearRect(0,0,640,480);
+
+    if (multi) {
+        drawBox(cube);
+        drawPyramid();
+    } else {
+        if (choice === 1) drawBox(cube);
+        else if (choice === 2) drawBox(cuboid);
+        else if (choice === 3) drawPyramid();
+        else drawSphere();
+    }
+
+    requestAnimationFrame(draw);
+}
+draw();
+
+// Controls
+document.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp") angleX -= 5;
+    if (e.key === "ArrowDown") angleX += 5;
+    if (e.key === "ArrowLeft") angleY -= 5;
+    if (e.key === "ArrowRight") angleY += 5;
+
+    if (e.key === "a" || e.key === "A") angleZ -= 5;
+    if (e.key === "d" || e.key === "D") angleZ += 5;
+
+    if (e.key === "+") zoom += 0.1;
+    if (e.key === "-") zoom -= 0.1;
+
+    if (e.key === "1") choice = 1;
+    if (e.key === "2") choice = 2;
+    if (e.key === "3") choice = 3;
+    if (e.key === "4") choice = 4;
+
+    if (e.key === "m" || e.key === "M") multi = !multi;
+
+    if (e.key === "o" || e.key === "O") projection = ortho;
+    if (e.key === "p" || e.key === "P") projection = perspective;
+    if (e.key === "i" || e.key === "I") projection = iso;
+});
+</script>
+
+</body>
+</html>
